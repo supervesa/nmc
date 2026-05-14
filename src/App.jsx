@@ -6,38 +6,53 @@ import AlbumView from './components/AlbumView'
 import Login from './components/Login'
 import UploadModal from './components/UploadModal'
 import { LightSentinelProvider, useLightSentinel } from './context/LightSentinelContext'
-import { supabase } from './config/supabaseClient' // UUSI: Tuodaan supabase
+import { supabase } from './config/supabaseClient'
+import { fetchLegacyAlbums } from './utils/legacyAdapter'
+
+// TUODAAN UUDET KOMPONENTIT
+import { NeonIcon, NeonButton, NeonCard } from './components/common'
 import './App.css'
 
 function NmcAppContent() {
-  const { session, isLoading, hasMediaAccess, userCircle, canUpload } = useLightSentinel();
+  const { session, profile, isLoading, hasMediaAccess, userCircle, canUpload } = useLightSentinel();
   const [selectedAlbum, setSelectedAlbum] = useState(null)
   const [isUploadOpen, setIsUploadOpen] = useState(false)
   
-  // UUDET TILAT OIKEALLE DATALLE
   const [albums, setAlbums] = useState([])
   const [isFetchingAlbums, setIsFetchingAlbums] = useState(true)
 
-  // HAE ALBUMIT JA NIIDEN KANSIKUVAT
   const fetchAlbums = async () => {
     setIsFetchingAlbums(true)
     
-    // Haetaan albumit sekä niihin liittyvät kuvat (jotta saadaan kansikuva)
-    const { data, error } = await supabase
-      .schema('nmc')
-      .from('albums')
-      .select(`
-        *,
-        photos ( file_path )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      const formattedAlbums = data.map(album => {
-        // Otetaan albumin ensimmäinen kuva kansikuvaksi
-        const coverPath = album.photos?.[0]?.file_path;
+    try {
+      const { data: circlesData } = await supabase
+        .from('security_circles')
+        .select('value, sort_order');
         
-        // Supabasen funktio rakentaa kuvalle oikean nettiosoitteen
+      const circleRanks = {};
+      if (circlesData) {
+        circlesData.forEach(c => {
+          circleRanks[c.value] = c.sort_order;
+        });
+      }
+      
+      const userRank = circleRanks[userCircle] || 0;
+
+      const fetchNewAlbumsTask = supabase
+        .schema('nmc')
+        .from('albums')
+        .select('*, photos ( file_path )')
+        .order('created_at', { ascending: false });
+
+      const [newAlbumsResponse, legacyAlbumsData] = await Promise.all([
+        fetchNewAlbumsTask,
+        fetchLegacyAlbums()
+      ]);
+
+      if (newAlbumsResponse.error) throw newAlbumsResponse.error;
+
+      const formattedNewAlbums = (newAlbumsResponse.data || []).map(album => {
+        const coverPath = album.photos?.[0]?.file_path;
         const coverUrl = coverPath 
           ? supabase.storage.from('nmc_vault').getPublicUrl(coverPath).data.publicUrl
           : 'https://via.placeholder.com/600x400?text=Ei+kuvia';
@@ -45,18 +60,30 @@ function NmcAppContent() {
         return {
           ...album,
           subtitle: `${new Date(album.created_at).toLocaleDateString('fi-FI')} • ${album.photos?.length || 0} kuvaa`,
-          imageUrl: coverUrl
+          imageUrl: coverUrl,
+          isLegacy: false
         };
       });
-      setAlbums(formattedAlbums);
-    } else {
-      console.error("Virhe albumien haussa:", error);
+
+      const allAlbums = [...formattedNewAlbums, ...legacyAlbumsData];
+
+      const allowedAlbums = allAlbums.filter(album => {
+        if (album.visibility === 'julkinen') return true;
+        if (profile?.role === 'superadmin') return true; // JUMALMOODI
+        
+        const albumRank = circleRanks[album.visibility] || 999; 
+        return userRank >= albumRank;
+      });
+      
+      setAlbums(allowedAlbums);
+
+    } catch (err) {
+      console.error("Virhe albumien käsittelyssä:", err);
+    } finally {
+      setIsFetchingAlbums(false)
     }
-    
-    setIsFetchingAlbums(false)
   }
 
-  // Ladataan albumit, kun käyttäjä on todennettu
   useEffect(() => {
     if (session && hasMediaAccess) {
       fetchAlbums()
@@ -79,10 +106,10 @@ function NmcAppContent() {
   if (!hasMediaAccess) {
     return (
       <div className="center-screen">
-        <div className="glass-panel prism-edge login-form text-center">
-          <h2 className="error-title">Pääsy Evätty</h2>
+        <NeonCard className="login-form text-center" hudCorners={true}>
+          <h2 style={{ color: 'var(--magenta)', marginBottom: '16px' }}>Pääsy Evätty</h2>
           <p className="text-muted">Media-moduulia ei ole aktivoitu tilillesi.</p>
-        </div>
+        </NeonCard>
       </div>
     )
   }
@@ -93,17 +120,31 @@ function NmcAppContent() {
       <main className="main-area">
         {!selectedAlbum ? (
           <>
-            <Header 
-              title="Kaikki Kuvat" 
-              description={`Turvaluokitus: Näytetään vain piirin '${userCircle?.toUpperCase() || ''}' ja sitä julkisemmat kuvat`} 
-              canUpload={canUpload}
-              onOpenUpload={() => setIsUploadOpen(true)}
-            />
+            <div className="header-bar">
+              <div>
+                <h1>KAIKKI KUVAT</h1>
+                <div className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                  <NeonIcon name="shield" size={14} color="var(--turquoise)" />
+                  PIIRI: {userCircle?.toUpperCase() || ''}
+                </div>
+              </div>
+              
+              {canUpload && (
+                <NeonButton icon="plus" onClick={() => setIsUploadOpen(true)}>
+                  Uusi Albumi
+                </NeonButton>
+              )}
+            </div>
 
             {isFetchingAlbums ? (
-              <div className="loading-text text-center" style={{ marginTop: '40px' }}>Ladataan albumeita...</div>
+              <div className="center-screen" style={{ height: 'auto', marginTop: '100px' }}>
+                <div className="loading-text">Puretaan salausta...</div>
+              </div>
             ) : albums.length === 0 ? (
-              <div className="text-muted text-center" style={{ marginTop: '40px' }}>Ei albumeita vielä. Lataa ensimmäinen!</div>
+              <div className="text-muted text-center" style={{ marginTop: '80px' }}>
+                <NeonIcon name="alert" size={48} color="var(--muted)" style={{ marginBottom: '16px', opacity: 0.2 }} />
+                <div>Ei löytyneitä arkistoja.</div>
+              </div>
             ) : (
               <div className="gallery-grid">
                 {albums.map((album) => (
@@ -113,6 +154,8 @@ function NmcAppContent() {
                     subtitle={album.subtitle}
                     imageUrl={album.imageUrl}
                     onClick={() => setSelectedAlbum(album)}
+                    isLegacy={album.isLegacy}
+                    visibility={album.visibility}
                   />
                 ))}
               </div>
@@ -126,7 +169,7 @@ function NmcAppContent() {
           <UploadModal 
             onClose={() => { 
               setIsUploadOpen(false); 
-              fetchAlbums(); // PÄIVITYS: Haetaan albumit uudelleen, kun modaali suljetaan!
+              fetchAlbums(); 
             }} 
           />
         )}

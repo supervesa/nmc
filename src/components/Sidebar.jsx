@@ -1,67 +1,85 @@
-import React from 'react'
-import { Image, FolderOpen, Star, ArrowLeft, LogOut } from 'lucide-react'
-import { useLightSentinel } from '../context/LightSentinelContext'
-import { supabase } from '../config/supabaseClient'
+import React from 'react';
+import { useLightSentinel } from '../context/LightSentinelContext';
+import { NeonIcon, NeonCard } from './common';
 
 export default function Sidebar() {
-  const { profile } = useLightSentinel()
+  const { profile, userCircle, session } = useLightSentinel();
 
-  // Uloskirjautuminen tuhoaa session Supabasesta.
-  // LightSentinelContext huomaa tämän automaattisesti, ja App.jsx 
-  // palauttaa käyttäjän välittömästi takaisin Login-ruutuun.
+  // Haetaan sähköpostiosoite istunnosta
+  const userEmail = session?.user?.email;
+
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-  }
-
-  // Generoidaan nimikirjaimista väliaikainen avatar, jos tietokannassa ei ole kuvaa
-  const avatarUrl = profile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${profile?.full_name || 'Käyttäjä'}`
+    // Tähän voi lisätä supabase.auth.signOut() myöhemmin
+    console.log("Kirjaudutaan ulos...");
+  };
 
   return (
-    <aside className="glass-panel sidebar prism-edge">
+    <aside className="sidebar">
       <div className="sidebar-header">
-        <h2 className="sidebar-brand">NMC</h2>
-        <div className="text-muted sidebar-subtitle">Nessling Media Central</div>
+        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <NeonIcon name="shield" color="var(--turquoise)" glow="cyan" size={24} />
+          <h2 style={{ fontSize: '1.2rem', letterSpacing: '2px' }}>NMC VAULT</h2>
+        </div>
+        <div className="text-muted sidebar-subtitle">SENTINEL LAYER 1 ACTIVE</div>
       </div>
 
-      <nav>
+      <nav style={{ marginTop: '40px', flex: 1 }}>
         <a href="#" className="nav-item active">
-          <Image size={18} className="icon-align" />
-          <span>Kaikki Kuvat</span>
+          <NeonIcon name="album" size={20} />
+          <span>Galleriat</span>
         </a>
         <a href="#" className="nav-item">
-          <FolderOpen size={18} className="icon-align" />
-          <span>Albumit</span>
+          <NeonIcon name="user" size={20} />
+          <span>Ystävät</span>
         </a>
+        {profile?.role === 'superadmin' && (
+          <a href="#" className="nav-item" style={{ color: 'var(--magenta)' }}>
+            <NeonIcon name="lock" size={20} color="var(--magenta)" glow="magenta" />
+            <span>Admin Control</span>
+          </a>
+        )}
         <a href="#" className="nav-item">
-          <Star size={18} className="icon-align" />
-          <span>Suosikit</span>
+          <NeonIcon name="settings" size={20} />
+          <span>Asetukset</span>
         </a>
       </nav>
 
       <div className="sidebar-bottom">
-        <div className="user-profile">
+        <NeonCard className="user-profile" style={{ padding: '12px' }}>
           <img 
-            src={avatarUrl} 
-            alt="Profiilikuva" 
+            src={profile?.avatar_url || 'https://via.placeholder.com/150'} 
+            alt="Avatar" 
             className="user-avatar" 
           />
-          <div className="user-info">
-            <span className="user-name">{profile?.full_name || 'Ladataan...'}</span>
-            <span className="user-role">{profile?.role || 'Käyttäjä'}</span>
+          <div className="user-info" style={{ overflow: 'hidden' }}>
+            <div className="user-name">{profile?.full_name || 'Vieras'}</div>
+            
+            {/* UUSI: Käyttäjän sähköpostiosoite */}
+            <div 
+              className="text-muted" 
+              style={{ 
+                fontSize: '0.7rem', 
+                whiteSpace: 'nowrap', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis',
+                marginBottom: '2px' 
+              }}
+            >
+              {userEmail}
+            </div>
+
+            <div className="user-role" style={{ fontSize: '0.65rem' }}>
+              {userCircle?.toUpperCase() || 'JULKINEN'}
+            </div>
           </div>
-        </div>
-
-        <button className="btn-return" onClick={() => window.location.href = 'http://localhost:3000/dashboard'}>
-          <ArrowLeft size={16} className="icon-align" />
-          NSG Keskushallinto
-        </button>
-
-        <button className="btn-return" onClick={handleLogout}>
-          <LogOut size={16} className="icon-align" />
-          Vaihda käyttäjää
-        </button>
+          <button 
+            onClick={handleLogout} 
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <NeonIcon name="logout" size={18} color="var(--muted)" />
+          </button>
+        </NeonCard>
       </div>
-
     </aside>
-  )
+  );
 }

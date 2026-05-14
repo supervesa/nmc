@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, UploadCloud, Trash2, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
-// KORJATTU TUONTI NMC-PROJEKTIIN:
 import { useLightSentinel } from '../context/LightSentinelContext';
 
+// 1. TUODAAN UUDET KYBERPUNK-KOMPONENTIT OHJAUSKESKUKSESTA
+import { NeonIcon, NeonButton, NeonInput, NeonCard, NeonSelect } from './common';
+
 export default function UploadModal({ onClose }) {
-  // KORJATTU KOUKKU:
   const { userProfile } = useLightSentinel();
 
-  const [circleOptions, setCircleOptions] = useState([]); // Paikallinen tila dynaamisille piireille
+  const [circleOptions, setCircleOptions] = useState([]); 
   const [title, setTitle] = useState('');
   const [visibility, setVisibility] = useState('julkinen');
   const [files, setFiles] = useState([]);
@@ -17,7 +17,6 @@ export default function UploadModal({ onClose }) {
 
   const fileInputRef = useRef(null);
 
-  // UUSI: Haetaan turvapiirit Supabasesta, kun modaali aukeaa
   useEffect(() => {
     const fetchCircles = async () => {
       const { data, error } = await supabase
@@ -64,7 +63,6 @@ export default function UploadModal({ onClose }) {
       return;
     }
 
-    // HAETAAN KÄYTTÄJÄ SUORAAN SUPABASESTA LATAUSHETKELLÄ (Pomminvarma tapa)
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
@@ -72,20 +70,19 @@ export default function UploadModal({ onClose }) {
       return;
     }
 
-    const userId = user.id; // Nyt meillä on 100% varmuudella oikea ID
+    const userId = user.id; 
 
     setIsUploading(true);
     setUploadProgress('Luodaan albumia...');
 
     try {
-      // 1. Luodaan albumi nmc-skeemaan
       const { data: albumData, error: albumError } = await supabase
         .schema('nmc')
         .from('albums')
         .insert({
           title: title,
           visibility: visibility,
-          created_by: userId // Käytetään luotettavaa ID:tä
+          created_by: userId 
         })
         .select()
         .single();
@@ -95,7 +92,6 @@ export default function UploadModal({ onClose }) {
       const albumId = albumData.id;
       let uploadedCount = 0;
 
-      // 2. Ladataan kuvat ja tallennetaan metadata
       for (const file of files) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -115,7 +111,7 @@ export default function UploadModal({ onClose }) {
           .insert({
             album_id: albumId,
             file_path: filePath,
-            created_by: userId // Käytetään luotettavaa ID:tä
+            created_by: userId 
           });
 
         if (photoError) throw photoError;
@@ -135,13 +131,23 @@ export default function UploadModal({ onClose }) {
     }
   };
 
+  // 2. MUOTOILLAAN OPTIOT NeonSelectiä varten
+  const selectOptions = [
+    { value: 'julkinen', label: 'Julkinen (Kaikki näkevät)' },
+    ...circleOptions.map(opt => ({
+      value: opt.value,
+      label: `${opt.label || opt.value} (Rajoitettu piiri)`
+    }))
+  ];
+
   return (
     <div className="lightbox-overlay" onClick={!isUploading ? onClose : undefined}>
-      <div className="glass-panel prism-edge upload-modal" onClick={(e) => e.stopPropagation()}>
+      {/* 3. KORVATTU TAVALLINEN DIV NEON-KORTILLA */}
+      <NeonCard className="upload-modal" onClick={(e) => e.stopPropagation()} hudCorners={true}>
         
         {!isUploading && (
-          <button className="lightbox-close upload-close" onClick={onClose}>
-            <X size={20} />
+          <button className="lightbox-close upload-close" onClick={onClose} style={{ zIndex: 10 }}>
+            <NeonIcon name="close" size={24} glow="magenta" color="var(--magenta)" />
           </button>
         )}
         
@@ -152,36 +158,27 @@ export default function UploadModal({ onClose }) {
 
         <div className="upload-form-scroll-area">
           <form onSubmit={handleUpload} className="upload-form">
-            <div className="form-group">
-              <label className="text-muted">Albumin nimi</label>
-              <input 
-                type="text" 
-                placeholder="Esim. Kesäretki 2026" 
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="glass-input"
-                required
-                disabled={isUploading}
-              />
-            </div>
+            
+            {/* 4. TÄYSIN PUHDAS NEON-INPUT */}
+            <NeonInput 
+              label="Albumin nimi"
+              placeholder="Esim. Kesäretki 2026"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              disabled={isUploading}
+              icon="album"
+            />
 
-            <div className="form-group">
-              <label className="text-muted">Näkyvyystaso (Turvaluokitus)</label>
-              <select 
-                value={visibility}
-                onChange={(e) => setVisibility(e.target.value)}
-                className="glass-input glass-select"
-                disabled={isUploading}
-              >
-                <option value="julkinen">Julkinen (Kaikki näkevät)</option>
-                {/* Dynaaminen lista kääntyy nyt suoraan paikallisesta tilasta */}
-                {circleOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label} (Rajoitettu piiri)
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* 5. TÄYSIN PUHDAS NEON-SELECT */}
+            <NeonSelect 
+              label="Näkyvyystaso (Turvaluokitus)"
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value)}
+              disabled={isUploading}
+              options={selectOptions}
+              icon="shield"
+            />
 
             <input 
               type="file" 
@@ -198,8 +195,8 @@ export default function UploadModal({ onClose }) {
               onDrop={handleDrop}
               onClick={() => !isUploading && fileInputRef.current.click()}
             >
-              <UploadCloud size={48} className="upload-icon" />
-              <p>Raahaa kuvat tähän tai <strong className="text-highlight">selaa tiedostoja</strong></p>
+              <NeonIcon name="upload" size={48} color="var(--turquoise)" glow="cyan" style={{ marginBottom: '16px' }} />
+              <p>Raahaa kuvat tähän tai <strong style={{ color: 'var(--turquoise)' }}>selaa tiedostoja</strong></p>
             </div>
 
             {files.length > 0 && (
@@ -208,8 +205,8 @@ export default function UploadModal({ onClose }) {
                 {files.map((file, index) => (
                   <div key={index} className="file-preview-item">
                     <div className="file-preview-info">
-                      <ImageIcon size={16} className="text-muted" />
-                      <span className="file-name">{file.name}</span>
+                      <NeonIcon name="image" size={16} color="var(--muted)" />
+                      <span className="file-name" style={{ marginLeft: '8px' }}>{file.name}</span>
                     </div>
                     {!isUploading && (
                       <button 
@@ -217,7 +214,7 @@ export default function UploadModal({ onClose }) {
                         onClick={(e) => { e.stopPropagation(); removeFile(index); }} 
                         className="btn-remove-file"
                       >
-                        <Trash2 size={16} />
+                        <NeonIcon name="close" size={16} color="var(--magenta)" glow="magenta" />
                       </button>
                     )}
                   </div>
@@ -225,16 +222,21 @@ export default function UploadModal({ onClose }) {
               </div>
             )}
 
-            <button 
+            {/* 6. ÄLYKÄS NEON-PAINIKE */}
+            <NeonButton 
               type="submit" 
-              className="btn-upload form-button action-mt" 
-              disabled={isUploading || files.length === 0}
+              className="action-mt"
+              icon="upload"
+              fullWidth={true}
+              isLoading={isUploading}
+              disabled={files.length === 0}
             >
               {isUploading ? uploadProgress : 'Luo albumi ja lataa'}
-            </button>
+            </NeonButton>
+
           </form>
         </div>
-      </div>
+      </NeonCard>
     </div>
   );
 }
